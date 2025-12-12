@@ -1,15 +1,21 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
 from contextlib import asynccontextmanager
 import json
-from json.decoder import JSONDecodeError
+import re
 
 from app.database import init_db, get_db, Notification
 from app.models import NotificationCreate, NotificationResponse
 from app.config import settings
+
+
+def clean_json_string(json_str: str) -> str:
+    """Remove invalid control characters from JSON string"""
+    # Remove all control characters except whitespace (\n, \r, \t, space)
+    cleaned = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", json_str, flags=re.MULTILINE)
+    return cleaned
 
 
 @asynccontextmanager
@@ -37,52 +43,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# Custom middleware to handle malformed JSON
-@app.middleware("http")
-async def sanitize_json_middleware(request: Request, call_next):
-    """Clean malformed JSON from mobile requests"""
-    if request.method == "POST" and "application/json" in request.headers.get(
-        "content-type", ""
-    ):
-        try:
-            body = await request.body()
-            body_str = body.decode("utf-8")
-
-            # Try to parse as-is first
-            try:
-                json.loads(body_str)
-            except JSONDecodeError:
-                # If parsing fails, sanitize the string
-                # Remove control characters except \n, \r, \t
-                sanitized = "".join(
-                    char if char in ["\n", "\r", "\t"] or ord(char) >= 32 else " "
-                    for char in body_str
-                )
-
-                # Try parsing the sanitized version
-                try:
-                    json.loads(sanitized)
-
-                    # If successful, replace the body
-                    async def receive():
-                        return {"type": "http.request", "body": sanitized.encode()}
-
-                    request._receive = receive
-                except JSONDecodeError:
-                    # Still invalid, return error
-                    return JSONResponse(
-                        status_code=400,
-                        content={
-                            "detail": "Invalid JSON format. Please check your request body."
-                        },
-                    )
-        except Exception:
-            pass  # Let FastAPI handle other errors
-
-    response = await call_next(request)
-    return response
 
 
 async def verify_api_key(x_api_key: Annotated[str, Header()] = None):
@@ -122,7 +82,7 @@ async def health_check():
     status_code=status.HTTP_201_CREATED,
 )
 async def create_notification(
-    notification: NotificationCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
@@ -132,6 +92,25 @@ async def create_notification(
     Requires X-API-Key header for authentication
     """
     try:
+        # Read raw body and clean it
+        body = await request.body()
+        body_str = body.decode("utf-8")
+
+        # Clean the JSON string from control characters
+        cleaned_json = clean_json_string(body_str)
+
+        # Parse the cleaned JSON
+        try:
+            data = json.loads(cleaned_json)
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid JSON: {str(e)}",
+            )
+
+        # Validate with Pydantic model
+        notification = NotificationCreate(**data)
+
         # Create notification instance
         db_notification = Notification(**notification.model_dump())
 
@@ -142,6 +121,8 @@ async def create_notification(
 
         return db_notification
 
+    except HTTPException:
+        raise
     except Exception as e:
         await db.rollback()
         raise HTTPException(
