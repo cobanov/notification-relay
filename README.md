@@ -5,33 +5,34 @@ FastAPI server to receive and store notifications from mobile devices.
 ## Quick Start
 
 ```bash
-# Start services
 docker-compose up -d
-
-# View logs
-docker-compose logs -f api
 ```
 
-API available at: `http://localhost:4141`  
-Database available at: `localhost:4142`
+**Access:**
+- API: `http://localhost:4141`
+- Database: `localhost:4142`
 
-## Environment Variables
+## Configuration
 
-Create `.env` file:
+Create `.env`:
 
 ```env
+# Database
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=your_password
 POSTGRES_DB=notifications
+
+# API
 API_KEY=your-secret-key
-ALLOWED_ORIGINS=*
+
+# Optional
+DEBUG=false
+LOG_LEVEL=INFO
 ```
 
-## API Endpoints
+## API Usage
 
-### `POST /notifications`
-
-Store a notification. Requires `X-API-Key` header.
+**Create Notification**
 
 ```bash
 curl -X POST http://localhost:4141/notifications \
@@ -40,32 +41,38 @@ curl -X POST http://localhost:4141/notifications \
   -d '{
     "app_name": "WhatsApp",
     "title": "New Message",
-    "text": "Hello!",
-    "timestamp": "2024-12-12T10:00:00"
+    "text": "Hello!"
   }'
 ```
 
-### `GET /health`
+**Health Check**
 
-Health check endpoint.
-
-### `GET /`
-
-API status and version.
+```bash
+curl http://localhost:4141/health
+```
 
 ## Development
 
 ```bash
-# Install dependencies
+# Install
 uv sync
 
-# Run locally
+# Run
 uv run uvicorn app.main:app --reload --port 8000
+
+# View logs
+docker-compose logs -f api
 ```
 
-## Tech Stack
+## Features
 
-- FastAPI
-- PostgreSQL
-- SQLAlchemy (async)
-- Docker + uv
+- Async PostgreSQL with SQLAlchemy
+- API key authentication
+- Automatic JSON sanitization for mobile apps
+- Structured logging
+- Health checks
+- Docker optimized with uv
+
+## Stack
+
+FastAPI · PostgreSQL · SQLAlchemy · Docker · uv
