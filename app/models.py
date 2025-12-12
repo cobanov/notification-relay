@@ -1,10 +1,10 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
 
 class NotificationCreate(BaseModel):
-    """Model for creating a notification"""
+    """Schema for creating a notification"""
 
     app_name: Optional[str] = None
     app_package: Optional[str] = None
@@ -19,19 +19,11 @@ class NotificationCreate(BaseModel):
     location: Optional[str] = None
     location_link: Optional[str] = None
 
-    @field_validator("*", mode="before")
-    @classmethod
-    def sanitize_strings(cls, v):
-        """Remove invalid control characters from strings"""
-        if isinstance(v, str):
-            # Remove null bytes and other problematic control characters
-            # but keep valid ones like \n, \r, \t
-            return v.replace("\x00", "").strip()
-        return v
-
 
 class NotificationResponse(BaseModel):
-    """Model for notification response"""
+    """Schema for notification response"""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     app_name: Optional[str] = None
@@ -47,5 +39,3 @@ class NotificationResponse(BaseModel):
     location: Optional[str] = None
     location_link: Optional[str] = None
     created_at: datetime
-
-    model_config = {"from_attributes": True}

@@ -1,7 +1,10 @@
 from pydantic_settings import BaseSettings
+from functools import lru_cache
 
 
 class Settings(BaseSettings):
+    """Application settings with environment variable support"""
+
     # Database settings
     postgres_user: str = "postgres"
     postgres_password: str = "postgres"
@@ -13,14 +16,29 @@ class Settings(BaseSettings):
     api_key: str = "your-secret-api-key-change-this"
     allowed_origins: str = "*"
 
+    # Application settings
+    debug: bool = False
+    log_level: str = "INFO"
+
     @property
     def database_url(self) -> str:
-        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        """Construct database URL from components"""
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
     model_config = {
         "env_file": ".env",
         "case_sensitive": False,
+        "extra": "ignore",
     }
 
 
-settings = Settings()
+@lru_cache
+def get_settings() -> Settings:
+    """Get cached settings instance"""
+    return Settings()
+
+
+settings = get_settings()
