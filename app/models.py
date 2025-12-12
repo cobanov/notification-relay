@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import datetime
 
@@ -18,6 +18,16 @@ class NotificationCreate(BaseModel):
     system_time: Optional[str] = None
     location: Optional[str] = None
     location_link: Optional[str] = None
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def sanitize_strings(cls, v):
+        """Remove invalid control characters from strings"""
+        if isinstance(v, str):
+            # Remove null bytes and other problematic control characters
+            # but keep valid ones like \n, \r, \t
+            return v.replace("\x00", "").strip()
+        return v
 
 
 class NotificationResponse(BaseModel):
