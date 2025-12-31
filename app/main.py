@@ -1,8 +1,11 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, status, Request
+from fastapi import FastAPI, Depends, HTTPException, Header, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Annotated
+from sqlalchemy import select, func, desc
 from contextlib import asynccontextmanager
+from pathlib import Path
 import json
 import re
 import logging
@@ -11,99 +14,112 @@ from app.database import init_db, get_db, Notification
 from app.models import NotificationCreate, NotificationResponse
 from app.config import settings
 
-# Configure logging
+logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper()),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-logger = logging.getLogger(__name__)
+
+STATIC_DIR = Path(__file__).parent.parent / "static"
 
 
-def clean_json_string(json_str: str) -> str:
-    """
-    Remove invalid control characters from JSON string.
-
-    This handles malformed JSON from mobile devices that may contain
-    unescaped control characters (common in WhatsApp and other apps).
-    """
-    # Remove all control characters except whitespace (\n, \r, \t, space)
-    cleaned = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", json_str, flags=re.MULTILINE)
-    return cleaned
+def clean_json(text: str) -> str:
+    """Remove control characters from JSON string."""
+    return re.sub(r"[\x00-\x1f\x7f-\x9f]", "", text)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager - handles startup and shutdown"""
-    # Startup
-    logger.info("Starting Notification Relay API...")
-    try:
-        await init_db()
-        logger.info("Application started successfully")
-    except Exception as e:
-        logger.error(f"Failed to start application: {e}")
-        raise
-
+    logger.info("Starting application...")
+    await init_db()
+    logger.info("Application started")
     yield
-
-    # Shutdown
-    logger.info("Shutting down Notification Relay API...")
+    logger.info("Shutting down...")
 
 
 app = FastAPI(
-    title="Notification Relay API",
-    description="FastAPI server to receive and store notifications from mobile devices",
+    title="Notification Relay",
     version="1.0.0",
     lifespan=lifespan,
 )
 
-# Configure CORS
-allowed_origins = (
-    settings.allowed_origins.split(",") if settings.allowed_origins != "*" else ["*"]
-)
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=settings.allowed_origins.split(",")
+    if settings.allowed_origins != "*"
+    else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-async def verify_api_key(x_api_key: Annotated[str | None, Header()] = None) -> str:
-    """Verify API key from request header"""
-    if x_api_key is None:
-        logger.warning("Request received without API key")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="X-API-Key header is required",
-        )
+async def verify_api_key(x_api_key: str | None = Header(None)) -> str:
+    if not x_api_key:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API key required")
     if x_api_key != settings.api_key:
-        logger.warning("Request received with invalid API key")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid API key",
-        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid API key")
     return x_api_key
 
 
 @app.get("/")
 async def root():
-    """Root endpoint - API information"""
-    return {
-        "status": "ok",
-        "message": "Notification Relay API is running",
-        "version": "1.0.0",
-        "endpoints": {
-            "health": "/health",
-            "notifications": "/notifications",
-        },
-    }
+    return {"status": "ok", "service": "notification-relay"}
 
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring"""
-    return {"status": "healthy", "service": "notification-relay"}
+async def health():
+    return {"status": "healthy"}
+
+
+@app.get("/dashboard")
+async def dashboard():
+    index = STATIC_DIR / "index.html"
+    if not index.exists():
+        raise HTTPException(404, "Dashboard not found")
+    return FileResponse(index)
+
+
+@app.get("/notifications", response_model=list[NotificationResponse])
+async def list_notifications(
+    db: AsyncSession = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    app_name: str | None = Query(None),
+):
+    query = select(Notification).order_by(desc(Notification.created_at))
+    if app_name:
+        query = query.where(Notification.app_name == app_name)
+    result = await db.execute(query.offset(skip).limit(limit))
+    return result.scalars().all()
+
+
+@app.get("/notifications/stats")
+async def get_stats(db: AsyncSession = Depends(get_db)):
+    total = (await db.execute(select(func.count(Notification.id)))).scalar()
+
+    by_app_query = (
+        select(Notification.app_name, func.count(Notification.id).label("count"))
+        .group_by(Notification.app_name)
+        .order_by(desc("count"))
+    )
+    by_app = [{"app_name": r[0], "count": r[1]} for r in await db.execute(by_app_query)]
+
+    return {"total": total, "by_app": by_app}
+
+
+@app.get("/notifications/apps")
+async def get_apps(db: AsyncSession = Depends(get_db)):
+    query = (
+        select(Notification.app_name)
+        .distinct()
+        .where(Notification.app_name.isnot(None))
+    )
+    result = await db.execute(query)
+    return {"apps": sorted([r[0] for r in result])}
 
 
 @app.post(
@@ -116,54 +132,28 @@ async def create_notification(
     db: AsyncSession = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
-    """
-    Create a new notification entry.
-
-    Requires X-API-Key header for authentication.
-    Handles malformed JSON from mobile devices automatically.
-    """
     try:
-        # Read and clean raw body
         body = await request.body()
-        body_str = body.decode("utf-8")
-
-        # Clean the JSON string from control characters
-        cleaned_json = clean_json_string(body_str)
-
-        # Parse the cleaned JSON
-        try:
-            data = json.loads(cleaned_json)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid JSON format: {str(e)}",
-            )
-
-        # Validate with Pydantic model
+        data = json.loads(clean_json(body.decode()))
         notification = NotificationCreate(**data)
 
-        # Create notification instance
         db_notification = Notification(**notification.model_dump())
-
-        # Save to database
         db.add(db_notification)
         await db.commit()
         await db.refresh(db_notification)
 
-        logger.info(
-            f"Created notification: id={db_notification.id}, app={db_notification.app_name}"
-        )
+        logger.info(f"Created notification: {db_notification.id}")
         return db_notification
 
+    except json.JSONDecodeError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid JSON: {e}")
     except HTTPException:
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Failed to create notification: {e}", exc_info=True)
+        logger.error(f"Failed to create notification: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create notification. Please try again.",
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to create notification"
         )
 
 

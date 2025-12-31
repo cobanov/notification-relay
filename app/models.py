@@ -1,41 +1,28 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
 from datetime import datetime
 
 
-class NotificationCreate(BaseModel):
-    """Schema for creating a notification"""
-
-    app_name: Optional[str] = None
-    app_package: Optional[str] = None
-    title: Optional[str] = None
-    text: Optional[str] = None
-    text_big: Optional[str] = None
-    text_lines: Optional[str] = None
-    sub_text: Optional[str] = None
-    ticker: Optional[str] = None
-    timestamp: Optional[str] = None
-    system_time: Optional[str] = None
-    location: Optional[str] = None
-    location_link: Optional[str] = None
+class NotificationBase(BaseModel):
+    app_name: str | None = None
+    app_package: str | None = None
+    title: str | None = None
+    text: str | None = None
+    text_big: str | None = None
+    text_lines: str | None = None
+    sub_text: str | None = None
+    ticker: str | None = None
+    timestamp: str | None = None
+    system_time: str | None = None
+    location: str | None = None
+    location_link: str | None = None
 
 
-class NotificationResponse(BaseModel):
-    """Schema for notification response"""
+class NotificationCreate(NotificationBase):
+    pass
 
+
+class NotificationResponse(NotificationBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    app_name: Optional[str] = None
-    app_package: Optional[str] = None
-    title: Optional[str] = None
-    text: Optional[str] = None
-    text_big: Optional[str] = None
-    text_lines: Optional[str] = None
-    sub_text: Optional[str] = None
-    ticker: Optional[str] = None
-    timestamp: Optional[str] = None
-    system_time: Optional[str] = None
-    location: Optional[str] = None
-    location_link: Optional[str] = None
     created_at: datetime
