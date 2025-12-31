@@ -5,34 +5,12 @@ function formatTime(isoString) {
     const now = new Date();
     const diff = now - date;
     
-    // Less than 1 minute
-    if (diff < 60000) return 'Just now';
+    if (diff < 60000) return 'now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d`;
     
-    // Less than 1 hour
-    if (diff < 3600000) {
-        const mins = Math.floor(diff / 60000);
-        return `${mins}m ago`;
-    }
-    
-    // Less than 24 hours
-    if (diff < 86400000) {
-        const hours = Math.floor(diff / 3600000);
-        return `${hours}h ago`;
-    }
-    
-    // Less than 7 days
-    if (diff < 604800000) {
-        const days = Math.floor(diff / 86400000);
-        return `${days}d ago`;
-    }
-    
-    // Default: show date
-    return date.toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 async function loadStats() {
@@ -42,7 +20,7 @@ async function loadStats() {
         
         document.getElementById('totalNotifications').textContent = data.total.toLocaleString();
         document.getElementById('uniqueApps').textContent = data.by_app.length;
-        document.getElementById('lastUpdated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+        document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
         
         const chart = document.getElementById('appChart');
         if (!data.by_app.length) {
@@ -51,7 +29,7 @@ async function loadStats() {
         }
         
         const max = Math.max(...data.by_app.map(a => a.count));
-        chart.innerHTML = data.by_app.slice(0, 8).map(app => `
+        chart.innerHTML = data.by_app.slice(0, 6).map(app => `
             <div class="bar">
                 <span class="bar-label">${app.app_name || 'Unknown'}</span>
                 <div class="bar-fill" style="width: ${(app.count / max) * 100}%">${app.count}</div>
@@ -100,7 +78,7 @@ async function loadNotifications() {
             <tr>
                 <td><span class="app-tag">${n.app_name || '-'}</span></td>
                 <td>${n.title || '-'}</td>
-                <td>${(n.text || '-').substring(0, 80)}${n.text?.length > 80 ? '...' : ''}</td>
+                <td>${(n.text || '-').substring(0, 60)}${n.text?.length > 60 ? '...' : ''}</td>
                 <td class="time" title="${new Date(n.created_at).toLocaleString()}">${formatTime(n.created_at)}</td>
             </tr>
         `).join('');
@@ -117,7 +95,7 @@ function refresh() {
 function showMessage(type) {
     const el = document.getElementById(type === 'success' ? 'successMessage' : 'errorMessage');
     el.style.display = 'block';
-    setTimeout(() => el.style.display = 'none', 3000);
+    setTimeout(() => el.style.display = 'none', 2000);
 }
 
 document.getElementById('addForm').addEventListener('submit', async (e) => {

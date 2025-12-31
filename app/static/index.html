@@ -5,72 +5,80 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Notifications</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Notifications</h1>
-            <span class="updated" id="lastUpdated"></span>
-        </header>
+    <nav>
+        <div class="nav-brand">Notifications</div>
+        <div class="nav-meta" id="lastUpdated"></div>
+    </nav>
 
-        <section class="stats">
-            <div class="stat">
-                <span class="stat-value" id="totalNotifications">0</span>
-                <span class="stat-label">Total</span>
-            </div>
-            <div class="stat">
-                <span class="stat-value" id="uniqueApps">0</span>
-                <span class="stat-label">Apps</span>
-            </div>
-        </section>
-
-        <section class="panel">
-            <h2>By App</h2>
-            <div id="appChart" class="chart"></div>
-        </section>
-
-        <section class="panel">
-            <h2>Add Notification</h2>
-            <div class="message success" id="successMessage">Added successfully</div>
-            <div class="message error" id="errorMessage">Failed to add</div>
-            <form id="addForm">
-                <div class="form-row">
-                    <input type="text" id="appName" placeholder="App Name" required>
-                    <input type="text" id="title" placeholder="Title" required>
+    <main>
+        <div class="grid">
+            <div class="card stats-card">
+                <div class="stat">
+                    <span class="stat-value" id="totalNotifications">0</span>
+                    <span class="stat-label">Total</span>
                 </div>
-                <textarea id="text" placeholder="Message" required></textarea>
-                <button type="submit">Add</button>
-            </form>
-        </section>
+                <div class="stat">
+                    <span class="stat-value" id="uniqueApps">0</span>
+                    <span class="stat-label">Apps</span>
+                </div>
+            </div>
 
-        <section class="panel">
-            <div class="toolbar">
-                <h2>Recent</h2>
-                <div class="filters">
+            <div class="card chart-card">
+                <div class="card-header">Distribution</div>
+                <div id="appChart" class="chart"></div>
+            </div>
+        </div>
+
+        <div class="card form-card">
+            <div class="card-header">New Entry</div>
+            <div class="toast success" id="successMessage">Added</div>
+            <div class="toast error" id="errorMessage">Failed</div>
+            <form id="addForm">
+                <div class="form-grid">
+                    <input type="text" id="appName" placeholder="App" required>
+                    <input type="text" id="title" placeholder="Title" required>
+                    <textarea id="text" placeholder="Message" required></textarea>
+                    <button type="submit">Add</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card table-card">
+            <div class="card-header">
+                <span>History</span>
+                <div class="controls">
                     <select id="filterApp">
-                        <option value="">All Apps</option>
+                        <option value="">All</option>
                     </select>
                     <select id="limitSelect">
                         <option value="50">50</option>
                         <option value="100" selected>100</option>
                         <option value="200">200</option>
                     </select>
-                    <button type="button" onclick="refresh()">Refresh</button>
+                    <button type="button" class="btn-secondary" onclick="refresh()">Refresh</button>
                 </div>
             </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>App</th>
-                        <th>Title</th>
-                        <th>Message</th>
-                        <th>Time</th>
-                    </tr>
-                </thead>
-                <tbody id="notificationsTable"></tbody>
-            </table>
-        </section>
-    </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>App</th>
+                            <th>Title</th>
+                            <th>Message</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="notificationsTable"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
     <script src="/static/script.js"></script>
 </body>
 </html>

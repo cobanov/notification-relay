@@ -5,6 +5,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-notifications}
+      TZ: UTC
+      PGTZ: UTC
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -25,6 +27,7 @@ services:
       POSTGRES_PORT: 5432
       API_KEY: ${API_KEY:-your-secret-api-key-change-this}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      TZ: UTC
     ports:
       - "${API_PORT:-4141}:8000"
     depends_on:
