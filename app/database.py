@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import Text, TIMESTAMP, func
-from datetime import datetime
+from sqlalchemy import Text, DateTime, func
+from datetime import datetime, timezone
 import logging
 
 from app.config import settings
@@ -34,7 +34,11 @@ class Notification(Base):
     system_time: Mapped[str | None] = mapped_column(Text)
     location: Mapped[str | None] = mapped_column(Text)
     location_link: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+    )
 
 
 engine: AsyncEngine = create_async_engine(

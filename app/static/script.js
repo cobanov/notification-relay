@@ -1,5 +1,40 @@
 const API_KEY = 'your-secret-api-key-change-this';
 
+function formatTime(isoString) {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diff = now - date;
+    
+    // Less than 1 minute
+    if (diff < 60000) return 'Just now';
+    
+    // Less than 1 hour
+    if (diff < 3600000) {
+        const mins = Math.floor(diff / 60000);
+        return `${mins}m ago`;
+    }
+    
+    // Less than 24 hours
+    if (diff < 86400000) {
+        const hours = Math.floor(diff / 3600000);
+        return `${hours}h ago`;
+    }
+    
+    // Less than 7 days
+    if (diff < 604800000) {
+        const days = Math.floor(diff / 86400000);
+        return `${days}d ago`;
+    }
+    
+    // Default: show date
+    return date.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
 async function loadStats() {
     try {
         const res = await fetch('/notifications/stats');
@@ -66,7 +101,7 @@ async function loadNotifications() {
                 <td><span class="app-tag">${n.app_name || '-'}</span></td>
                 <td>${n.title || '-'}</td>
                 <td>${(n.text || '-').substring(0, 80)}${n.text?.length > 80 ? '...' : ''}</td>
-                <td class="time">${new Date(n.created_at).toLocaleString()}</td>
+                <td class="time" title="${new Date(n.created_at).toLocaleString()}">${formatTime(n.created_at)}</td>
             </tr>
         `).join('');
     } catch (e) {
