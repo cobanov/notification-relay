@@ -20,7 +20,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
-STATIC_DIR = Path(__file__).parent.parent / "static"
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 def clean_json(text: str) -> str:
