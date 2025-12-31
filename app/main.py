@@ -1,13 +1,18 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from contextlib import asynccontextmanager
 from pathlib import Path
+import base64
+import hashlib
+import hmac
 import json
+import os
 import re
+import time
 import logging
 
 from app.database import init_db, get_db, Notification
@@ -65,6 +70,72 @@ async def verify_api_key(x_api_key: str | None = Header(None)) -> str:
     return x_api_key
 
 
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
+
+
+def _b64url_decode(data: str) -> bytes:
+    pad = "=" * ((4 - (len(data) % 4)) % 4)
+    return base64.urlsafe_b64decode((data + pad).encode("utf-8"))
+
+
+def _sign_session_payload(payload: str) -> str:
+    # HMAC secret is the API key. This keeps the solution dependency-free.
+    return hmac.new(
+        settings.api_key.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _make_session_cookie_value() -> str:
+    ts = int(time.time())
+    nonce = _b64url_encode(os.urandom(16))
+    payload = f"v1:{ts}:{nonce}"
+    sig = _sign_session_payload(payload)
+    return _b64url_encode(f"{payload}.{sig}".encode("utf-8"))
+
+
+def _is_session_valid(request: Request) -> bool:
+    raw = request.cookies.get(settings.session_cookie_name)
+    if not raw:
+        return False
+    try:
+        decoded = _b64url_decode(raw).decode("utf-8")
+        payload, sig = decoded.rsplit(".", 1)
+        expected = _sign_session_payload(payload)
+        if not hmac.compare_digest(sig, expected):
+            return False
+
+        parts = payload.split(":")
+        if len(parts) != 3 or parts[0] != "v1":
+            return False
+        ts = int(parts[1])
+        if int(time.time()) - ts > settings.session_max_age_seconds:
+            return False
+        return True
+    except Exception:
+        return False
+
+
+async def require_auth(
+    request: Request,
+    x_api_key: str | None = Header(None),
+) -> None:
+    # Allow either:
+    # - API clients: X-API-Key header
+    # - Dashboard: HTTP-only session cookie
+    if x_api_key is not None:
+        if hmac.compare_digest(x_api_key, settings.api_key):
+            return
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid API key")
+
+    if _is_session_valid(request):
+        return
+
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Login required")
+
+
 @app.get("/")
 async def root():
     return {"status": "ok", "service": "notification-relay"}
@@ -76,16 +147,67 @@ async def health():
 
 
 @app.get("/dashboard")
-async def dashboard():
+async def dashboard(request: Request):
     index = STATIC_DIR / "index.html"
     if not index.exists():
         raise HTTPException(404, "Dashboard not found")
+    if not _is_session_valid(request):
+        login = STATIC_DIR / "login.html"
+        if not login.exists():
+            raise HTTPException(404, "Login page not found")
+        return FileResponse(login)
     return FileResponse(index)
+
+
+@app.get("/login")
+async def login_page():
+    login = STATIC_DIR / "login.html"
+    if not login.exists():
+        raise HTTPException(404, "Login page not found")
+    return FileResponse(login)
+
+
+@app.get("/auth/me")
+async def auth_me(request: Request):
+    if _is_session_valid(request):
+        return {"authenticated": True}
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Login required")
+
+
+@app.post("/auth/login")
+async def auth_login(request: Request):
+    data = await request.json()
+    password = (data.get("password") or "").strip()
+    if not password:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Password required")
+
+    if not hmac.compare_digest(password, settings.api_key):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid password")
+
+    res = JSONResponse({"ok": True})
+    res.set_cookie(
+        key=settings.session_cookie_name,
+        value=_make_session_cookie_value(),
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        max_age=settings.session_max_age_seconds,
+        path="/",
+    )
+    return res
+
+
+@app.post("/auth/logout")
+async def auth_logout():
+    res = JSONResponse({"ok": True})
+    res.delete_cookie(key=settings.session_cookie_name, path="/")
+    return res
 
 
 @app.get("/notifications", response_model=list[NotificationResponse])
 async def list_notifications(
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_auth),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     app_name: str | None = Query(None),
@@ -98,7 +220,7 @@ async def list_notifications(
 
 
 @app.get("/notifications/stats")
-async def get_stats(db: AsyncSession = Depends(get_db)):
+async def get_stats(db: AsyncSession = Depends(get_db), _: None = Depends(require_auth)):
     total = (await db.execute(select(func.count(Notification.id)))).scalar()
 
     by_app_query = (
@@ -112,7 +234,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 
 
 @app.get("/notifications/apps")
-async def get_apps(db: AsyncSession = Depends(get_db)):
+async def get_apps(db: AsyncSession = Depends(get_db), _: None = Depends(require_auth)):
     query = (
         select(Notification.app_name)
         .distinct()
@@ -130,7 +252,7 @@ async def get_apps(db: AsyncSession = Depends(get_db)):
 async def create_notification(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+    _: None = Depends(require_auth),
 ):
     try:
         body = await request.body()

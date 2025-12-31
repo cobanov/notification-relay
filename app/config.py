@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     
     api_key: str = "your-secret-api-key-change-this"
     allowed_origins: str = "*"
+
+    # Dashboard session (password-only login using the API key)
+    session_cookie_name: str = "nr_session"
+    session_max_age_seconds: int = 60 * 60 * 24 * 7  # 7 days
+    cookie_secure: bool = False
     
     debug: bool = False
     log_level: str = "INFO"

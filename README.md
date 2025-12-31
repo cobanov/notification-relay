@@ -11,6 +11,7 @@ docker-compose up -d
 **Access:**
 - API: `http://localhost:4141`
 - Database: `localhost:4142`
+- Dashboard: `http://localhost:4141/dashboard` (password = `API_KEY`)
 
 ## Configuration
 
@@ -44,6 +45,11 @@ curl -X POST http://localhost:4141/notifications \
     "text": "Hello!"
   }'
 ```
+
+**Dashboard**
+
+- Go to `/dashboard`
+- Enter the **same value** as your `X-API-Key` / `API_KEY` (no username)
 
 **Health Check**
 
