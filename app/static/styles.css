@@ -48,6 +48,14 @@ nav {
 .nav-meta {
     font-size: 11px;
     color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn-small {
+    padding: 6px 10px;
+    font-size: 11px;
 }
 
 main {
@@ -281,6 +289,34 @@ tr:hover td {
     text-align: center;
     padding: 32px;
     color: var(--text-muted);
+}
+
+.auth-wrap {
+    min-height: calc(100vh - 120px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.auth-card {
+    width: min(520px, 100%);
+}
+
+.auth-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+}
+
+.auth-hint {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.auth-hint code {
+    color: var(--text);
 }
 
 @media (max-width: 900px) {

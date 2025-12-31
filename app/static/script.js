@@ -1,4 +1,24 @@
-const API_KEY = 'your-secret-api-key-change-this';
+async function ensureAuthenticated() {
+    try {
+        const res = await fetch('/auth/me');
+        if (!res.ok) {
+            window.location.href = '/dashboard';
+            return false;
+        }
+        return true;
+    } catch {
+        window.location.href = '/dashboard';
+        return false;
+    }
+}
+
+function redirectIfUnauthorized(res) {
+    if (res.status === 401 || res.status === 403) {
+        window.location.href = '/dashboard';
+        return true;
+    }
+    return false;
+}
 
 function formatTime(isoString) {
     const date = new Date(isoString);
@@ -16,6 +36,7 @@ function formatTime(isoString) {
 async function loadStats() {
     try {
         const res = await fetch('/notifications/stats');
+        if (redirectIfUnauthorized(res)) return;
         const data = await res.json();
         
         document.getElementById('totalNotifications').textContent = data.total.toLocaleString();
@@ -43,6 +64,7 @@ async function loadStats() {
 async function loadApps() {
     try {
         const res = await fetch('/notifications/apps');
+        if (redirectIfUnauthorized(res)) return;
         const data = await res.json();
         const select = document.getElementById('filterApp');
         
@@ -66,6 +88,7 @@ async function loadNotifications() {
     
     try {
         const res = await fetch(`/notifications?${params}`);
+        if (redirectIfUnauthorized(res)) return;
         const data = await res.json();
         const tbody = document.getElementById('notificationsTable');
         
@@ -104,7 +127,7 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
     try {
         const res = await fetch('/notifications', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 app_name: document.getElementById('appName').value,
                 title: document.getElementById('title').value,
@@ -117,6 +140,7 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
             e.target.reset();
             refresh();
         } else {
+            if (redirectIfUnauthorized(res)) return;
             showMessage('error');
         }
     } catch {
@@ -127,8 +151,20 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
 document.getElementById('filterApp').addEventListener('change', loadNotifications);
 document.getElementById('limitSelect').addEventListener('change', loadNotifications);
 
-loadStats();
-loadApps();
-loadNotifications();
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    try {
+        await fetch('/auth/logout', { method: 'POST' });
+    } finally {
+        window.location.href = '/dashboard';
+    }
+});
 
-setInterval(refresh, 30000);
+(async () => {
+    const ok = await ensureAuthenticated();
+    if (!ok) return;
+
+    loadStats();
+    loadApps();
+    loadNotifications();
+    setInterval(refresh, 30000);
+})();
