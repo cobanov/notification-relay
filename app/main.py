@@ -1,6 +1,16 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, status, Request, Query
+from fastapi import (
+    FastAPI,
+    Depends,
+    HTTPException,
+    Header,
+    status,
+    Request,
+    Query,
+    Form,
+    Cookie,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
@@ -9,6 +19,7 @@ from pathlib import Path
 import json
 import re
 import logging
+import hashlib
 
 from app.database import init_db, get_db, Notification
 from app.models import NotificationCreate, NotificationResponse
@@ -21,11 +32,19 @@ logging.basicConfig(
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
+SESSION_TOKEN = hashlib.sha256(settings.api_key.encode()).hexdigest()
 
 
 def clean_json(text: str) -> str:
     """Remove control characters from JSON string."""
     return re.sub(r"[\x00-\x1f\x7f-\x9f]", "", text)
+
+
+def verify_session(session: str | None = Cookie(None)):
+    """Verify session cookie for dashboard access."""
+    if session != SESSION_TOKEN:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Unauthorized")
+    return session
 
 
 @asynccontextmanager
@@ -75,8 +94,40 @@ async def health():
     return {"status": "healthy"}
 
 
+@app.get("/login")
+async def login_page():
+    login_file = STATIC_DIR / "login.html"
+    if not login_file.exists():
+        raise HTTPException(404, "Login page not found")
+    return FileResponse(login_file)
+
+
+@app.post("/login")
+async def login(api_key: str = Form(...)):
+    if api_key != settings.api_key:
+        return RedirectResponse(url="/login?error=1", status_code=302)
+    response = RedirectResponse(url="/dashboard", status_code=302)
+    response.set_cookie(
+        key="session",
+        value=SESSION_TOKEN,
+        httponly=True,
+        max_age=86400 * 7,  # 7 days
+        samesite="lax",
+    )
+    return response
+
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/login", status_code=302)
+    response.delete_cookie("session")
+    return response
+
+
 @app.get("/dashboard")
-async def dashboard():
+async def dashboard(session: str | None = Cookie(None)):
+    if session != SESSION_TOKEN:
+        return RedirectResponse(url="/login", status_code=302)
     index = STATIC_DIR / "index.html"
     if not index.exists():
         raise HTTPException(404, "Dashboard not found")
@@ -86,10 +137,14 @@ async def dashboard():
 @app.get("/notifications", response_model=list[NotificationResponse])
 async def list_notifications(
     db: AsyncSession = Depends(get_db),
+    session: str | None = Cookie(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     app_name: str | None = Query(None),
 ):
+    if session != SESSION_TOKEN:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Unauthorized")
+
     query = select(Notification).order_by(desc(Notification.created_at))
     if app_name:
         query = query.where(Notification.app_name == app_name)
@@ -98,7 +153,12 @@ async def list_notifications(
 
 
 @app.get("/notifications/stats")
-async def get_stats(db: AsyncSession = Depends(get_db)):
+async def get_stats(
+    db: AsyncSession = Depends(get_db), session: str | None = Cookie(None)
+):
+    if session != SESSION_TOKEN:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Unauthorized")
+
     total = (await db.execute(select(func.count(Notification.id)))).scalar()
 
     by_app_query = (
@@ -112,7 +172,12 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 
 
 @app.get("/notifications/apps")
-async def get_apps(db: AsyncSession = Depends(get_db)):
+async def get_apps(
+    db: AsyncSession = Depends(get_db), session: str | None = Cookie(None)
+):
+    if session != SESSION_TOKEN:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Unauthorized")
+
     query = (
         select(Notification.app_name)
         .distinct()
@@ -130,8 +195,12 @@ async def get_apps(db: AsyncSession = Depends(get_db)):
 async def create_notification(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(verify_api_key),
+    x_api_key: str | None = Header(None),
+    session: str | None = Cookie(None),
 ):
+    # Allow either API key or valid session
+    if x_api_key != settings.api_key and session != SESSION_TOKEN:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Unauthorized")
     try:
         body = await request.body()
         data = json.loads(clean_json(body.decode()))

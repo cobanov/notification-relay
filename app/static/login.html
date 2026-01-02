@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #09090b;
+            --surface: #18181b;
+            --border: #3f3f46;
+            --text: #fafafa;
+            --text-muted: #a1a1aa;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --error: #ef4444;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .login-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 40px;
+            width: 100%;
+            max-width: 360px;
+        }
+        
+        h1 {
+            font-size: 14px;
+            margin-bottom: 24px;
+            font-weight: 500;
+        }
+        
+        input {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 12px;
+            font-size: 13px;
+            font-family: inherit;
+            margin-bottom: 16px;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        button {
+            width: 100%;
+            background: var(--accent);
+            color: var(--text);
+            border: none;
+            padding: 12px;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: var(--accent-hover);
+        }
+        
+        .error {
+            color: var(--error);
+            font-size: 12px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        
+        .error.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h1>Notifications Dashboard</h1>
+        <p class="error" id="error">Invalid API key</p>
+        <form id="loginForm">
+            <input type="password" name="api_key" id="apiKey" placeholder="API Key" required autofocus>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+    
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('error') === '1') {
+            document.getElementById('error').classList.add('show');
+        }
+        
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = new FormData();
+            form.append('api_key', document.getElementById('apiKey').value);
+            
+            const res = await fetch('/login', {
+                method: 'POST',
+                body: form
+            });
+            
+            if (res.redirected) {
+                window.location.href = res.url;
+            } else {
+                document.getElementById('error').classList.add('show');
+            }
+        });
+    </script>
+</body>
+</html>
+
