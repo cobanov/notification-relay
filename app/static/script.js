@@ -1,4 +1,10 @@
-const API_KEY = 'your-secret-api-key-change-this';
+async function checkAuth(res) {
+    if (res.status === 401) {
+        window.location.href = '/login';
+        return false;
+    }
+    return true;
+}
 
 function formatTime(isoString) {
     const date = new Date(isoString);
@@ -15,7 +21,8 @@ function formatTime(isoString) {
 
 async function loadStats() {
     try {
-        const res = await fetch('/notifications/stats');
+        const res = await fetch('/notifications/stats', { credentials: 'same-origin' });
+        if (!await checkAuth(res)) return;
         const data = await res.json();
         
         document.getElementById('totalNotifications').textContent = data.total.toLocaleString();
@@ -42,7 +49,8 @@ async function loadStats() {
 
 async function loadApps() {
     try {
-        const res = await fetch('/notifications/apps');
+        const res = await fetch('/notifications/apps', { credentials: 'same-origin' });
+        if (!await checkAuth(res)) return;
         const data = await res.json();
         const select = document.getElementById('filterApp');
         
@@ -65,7 +73,8 @@ async function loadNotifications() {
     if (app) params.append('app_name', app);
     
     try {
-        const res = await fetch(`/notifications?${params}`);
+        const res = await fetch(`/notifications?${params}`, { credentials: 'same-origin' });
+        if (!await checkAuth(res)) return;
         const data = await res.json();
         const tbody = document.getElementById('notificationsTable');
         
@@ -104,13 +113,16 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
     try {
         const res = await fetch('/notifications', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 app_name: document.getElementById('appName').value,
                 title: document.getElementById('title').value,
                 text: document.getElementById('text').value,
             })
         });
+        
+        if (!await checkAuth(res)) return;
         
         if (res.ok) {
             showMessage('success');

@@ -45,9 +45,29 @@ nav {
     letter-spacing: 0.5px;
 }
 
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
 .nav-meta {
     font-size: 11px;
     color: var(--text-muted);
+}
+
+.logout-btn {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+}
+
+.logout-btn:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
 }
 
 main {
